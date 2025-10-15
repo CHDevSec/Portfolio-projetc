@@ -88,13 +88,21 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   // Garante que a página inteira (incluindo imagens) carregou antes de rolar.
-  // Isso evita erros de cálculo de posição em conexões lentas.
+  // Se houver seção salva (vinda do viewer), rola para ela; senão, foca em About.
   $(window).on('load', function() {
-    // Rola suavemente para a seção "About" após a tela de boas-vindas.
-    // O timeout extra garante que a animação de fade-in do conteúdo não interfira.
-    setTimeout(function() {
-      $('html, body').animate({ scrollTop: $("#about").offset().top }, 800, "easeInOutExpo");
-    }, 200); // Pequeno delay para garantir a fluidez
+    const savedSection = localStorage.getItem('lastPortfolioSection');
+    if (savedSection) {
+      const $target = $("#" + savedSection);
+      const targetTop = $target.length ? ($target.offset().top - 70) : 0;
+      setTimeout(function() {
+        $('html, body').animate({ scrollTop: targetTop }, 800, 'easeInOutExpo');
+        localStorage.removeItem('lastPortfolioSection');
+      }, 200);
+    } else {
+      setTimeout(function() {
+        $('html, body').animate({ scrollTop: $("#about").offset().top }, 800, "easeInOutExpo");
+      }, 200);
+    }
   });
 
   // Initialize AOS (Animate on Scroll) after the welcome screen logic
@@ -209,7 +217,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
       // Se houver uma URL de documentação dedicada, navegar para a página
       if (docsUrl) {
-        window.location.href = docsUrl;
+        // Salvar a seção atual antes de navegar para documentação
+        const currentSection = getCurrentSection();
+        console.log('Salvando seção antes de ir para docs:', currentSection);
+        localStorage.setItem('lastPortfolioSection', currentSection);
+        
+        // Aguardar um pouco para garantir que o localStorage foi salvo
+        setTimeout(() => {
+          window.location.href = docsUrl;
+        }, 100);
         return;
       }
       const projectModalId = $btn.data('project-modal');
@@ -279,8 +295,25 @@ document.addEventListener('DOMContentLoaded', function() {
       const $target = $(hash);
       if ($target.length) {
         $('html, body').animate({ scrollTop: $target.offset().top - 70 }, 600, 'easeInOutExpo');
+        
+        // Salvar a seção atual após a animação
+        setTimeout(() => {
+          const sectionName = hash.substring(1); // remove o #
+          localStorage.setItem('lastPortfolioSection', sectionName);
+        }, 650); // um pouco depois da animação
+        
         e.preventDefault();
       }
+    });
+
+    // Listener para detectar mudanças de seção durante o scroll
+    let scrollTimeout;
+    $(window).on('scroll', function() {
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        const currentSection = getCurrentSection();
+        localStorage.setItem('lastPortfolioSection', currentSection);
+      }, 150); // debounce para evitar muitas chamadas
     });
 
     // Remove qualquer lógica de animação automática em hashchange
@@ -288,6 +321,116 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
 });
+
+// Função para detectar a seção atual baseada na posição do scroll
+function getCurrentSection() {
+  const sections = ['about', 'experience', 'education', 'skills', 'projects', 'certifications', 'contact'];
+  const scrollPosition = $(window).scrollTop();
+  
+  console.log('Detectando seção - scroll position:', scrollPosition);
+  
+  // Encontrar a seção mais próxima do topo da viewport
+  let closestSection = 'about';
+  let minDistance = Infinity;
+  
+  sections.forEach(section => {
+    const $section = $(`#${section}`);
+    if ($section.length) {
+      const sectionTop = $section.offset().top;
+      const distance = Math.abs(scrollPosition - sectionTop);
+      
+      console.log(`Seção ${section}: top=${sectionTop}, distance=${distance}`);
+      
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestSection = section;
+      }
+    } else {
+      console.log(`Seção ${section} NÃO ENCONTRADA no DOM`);
+    }
+  });
+  
+  console.log('Seção final detectada:', closestSection);
+  return closestSection;
+}
+
+// Função para navegar de volta à seção específica
+function navigateToLastSection() {
+  const lastSection = localStorage.getItem('lastPortfolioSection');
+  console.log('Seção salva no localStorage:', lastSection);
+  
+  // Mostrar feedback visual
+  showNavigationFeedback(lastSection);
+  
+  if (lastSection && lastSection !== 'about') {
+    const target = document.getElementById(lastSection);
+    console.log('Target encontrado:', target ? 'SIM' : 'NÃO', 'ID:', lastSection);
+    
+    if (target) {
+      const targetTop = target.offsetTop - 70;
+      console.log('Navegando para:', lastSection, 'posição:', targetTop);
+      
+      // Usar scroll nativo do JavaScript como fallback
+      window.scrollTo({
+        top: targetTop,
+        behavior: 'smooth'
+      });
+      
+      // Também tentar com jQuery se disponível
+      if (typeof $ !== 'undefined') {
+        $('html, body').animate({ 
+          scrollTop: targetTop 
+        }, 800, 'easeInOutExpo');
+      }
+    } else {
+      console.log('Seção não encontrada, indo para o topo');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  } else {
+    console.log('Nenhuma seção salva ou é about, indo para o topo');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  
+  // Limpar a informação salva após usar
+  localStorage.removeItem('lastPortfolioSection');
+}
+
+// Função para mostrar feedback visual da navegação
+function showNavigationFeedback(section) {}
+
+// Função de teste para debug
+function testNavigation() {
+  console.log('=== TESTE DE NAVEGAÇÃO ===');
+  console.log('localStorage atual:', localStorage.getItem('lastPortfolioSection'));
+  console.log('Todas as seções disponíveis:');
+  const sections = ['about', 'experience', 'education', 'skills', 'projects', 'certifications', 'contact'];
+  sections.forEach(section => {
+    const element = document.getElementById(section);
+    if (element) {
+      console.log(`${section}: encontrada, top=${element.offsetTop}`);
+    } else {
+      console.log(`${section}: NÃO encontrada`);
+    }
+  });
+  
+  // Simular salvamento de seção 'projects'
+  localStorage.setItem('lastPortfolioSection', 'projects');
+  console.log('Salvou seção "projects" no localStorage');
+  
+  // Testar navegação
+  setTimeout(() => {
+    console.log('Iniciando teste de navegação...');
+    navigateToLastSection();
+  }, 1000);
+}
+
+// Função para forçar navegação para Projects
+function forceGoToProjects() {
+  console.log('=== FORÇANDO NAVEGAÇÃO PARA PROJECTS ===');
+  
+  // Navegar diretamente para a seção projects
+  window.location.href = '../index.html#projects';
+}
 
 function copyToClipboard(text, element) {
   navigator.clipboard.writeText(text).then(function() {
